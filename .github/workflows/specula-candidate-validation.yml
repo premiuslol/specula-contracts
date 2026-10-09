@@ -1,0 +1,63 @@
+name: Specula isolated candidate validation
+on:
+  push:
+    branches: [validation/specula-candidates-20261009]
+permissions:
+  contents: read
+concurrency:
+  group: specula-candidate-validation-20261009
+  cancel-in-progress: true
+jobs:
+  focused-cargo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - candidate: issue-1-persistent-registry
+            sha: 43f91cd40716b505cfb06bc1abcdd66228a83294
+          - candidate: issue-2-threshold-read
+            sha: 9d62aa9bd57480b958ab064fd9daee1a223090d1
+          - candidate: issue-9-remove-dependency
+            sha: 3340abb1677509d781de793edf14d245c60b4911
+    steps:
+      - name: Fetch exact owned-fork candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ matrix.sha }}
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable ref verified 2026-10-09
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy,rustfmt
+      - name: Record exact source and dependency conditions
+        run: |
+          git rev-parse HEAD
+          cargo --version
+          rustc --version
+      - name: Replicate upstream dependency workaround when present
+        if: matrix.candidate != 'issue-9-remove-dependency'
+        run: cargo update -p ed25519-dalek@3.0.0 --precise 2.1.1
+      - name: Test
+        run: cargo test
+      - name: Lint
+        run: cargo clippy --all-targets -- -D warnings
+  format-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Fetch exact upstream-matching base
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: 0978693e7749a5474597e73c3138ce96375990c6
+          persist-credentials: false
+      - name: Rustfmt
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable ref verified 2026-10-09
+        with:
+          components: rustfmt
+      - name: Print rustfmt delta
+        run: |
+          cargo fmt --all
+          git --no-pager diff -- src/lib.rs src/test.rs
