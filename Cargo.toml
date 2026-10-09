@@ -12,8 +12,6 @@ soroban-sdk = "22.0.8"
 
 [dev-dependencies]
 soroban-sdk = { version = "22.0.8", features = ["testutils"] }
-# Soroban SDK 22 testutils are incompatible with the latest ed25519-dalek 3.x.
-# Keep an explicit 2.1.1 resolution guard until the SDK is upgraded.
 ed25519-dalek = "=2.1.1"
 
 [profile.release]
