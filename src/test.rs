@@ -81,6 +81,61 @@ fn admin_can_change_threshold_and_revoke_agents() {
     assert!(!client.is_agent(&agent));
 }
 
+
+#[test]
+#[should_panic(expected = "unauthorized")]
+fn non_admin_cannot_authorize_agent() {
+    let env = Env::default();
+    let contract_id = env.register(StellarSentinel, ());
+    let client = StellarSentinelClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let stranger = Address::generate(&env);
+    let agent = Address::generate(&env);
+    let other_agent = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin, &75);
+    client.authorize_agent(&admin, &agent);
+    assert!(client.is_agent(&agent));
+    client.authorize_agent(&stranger, &other_agent);
+}
+
+#[test]
+#[should_panic(expected = "unauthorized")]
+fn non_admin_cannot_revoke_agent() {
+    let env = Env::default();
+    let contract_id = env.register(StellarSentinel, ());
+    let client = StellarSentinelClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let stranger = Address::generate(&env);
+    let agent = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin, &75);
+    client.authorize_agent(&admin, &agent);
+    client.revoke_agent(&admin, &agent);
+    assert!(!client.is_agent(&agent));
+    client.authorize_agent(&admin, &agent);
+    assert!(client.is_agent(&agent));
+    client.revoke_agent(&stranger, &agent);
+}
+
+#[test]
+#[should_panic(expected = "unauthorized")]
+fn non_admin_cannot_set_threshold() {
+    let env = Env::default();
+    let contract_id = env.register(StellarSentinel, ());
+    let client = StellarSentinelClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let stranger = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin, &75);
+    client.set_threshold(&admin, &80);
+    assert_eq!(client.get_threshold(), 80);
+    client.set_threshold(&stranger, &30);
+}
+
 #[test]
 fn latest_flag_is_empty_before_first_flag() {
     let env = Env::default();
