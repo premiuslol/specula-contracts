@@ -1,6 +1,6 @@
 #![cfg(test)]
 use super::*;
-use soroban_sdk::testutils::Address as _;
+use soroban_sdk::{testutils::{Address as _, Events as _}, IntoVal};
 
 #[test]
 fn test_initialize_and_threshold() {
@@ -80,6 +80,55 @@ fn admin_can_change_threshold_and_revoke_agents() {
     client.revoke_agent(&admin, &agent);
     assert!(!client.is_agent(&agent));
 }
+
+
+#[test]
+fn flag_anomaly_emits_flagged_event_with_topics_and_score() {
+    let env = Env::default();
+    let contract_id = env.register(StellarSentinel, ());
+    let client = StellarSentinelClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let agent = Address::generate(&env);
+    let subject = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin, &75);
+    client.authorize_agent(&admin, &agent);
+    client.flag_anomaly(&agent, &subject, &80);
+
+    assert_eq!(
+        env.events().all(),
+        soroban_sdk::vec![
+            &env,
+            (
+                contract_id,
+                (symbol_short!("flagged"), agent, subject).into_val(&env),
+                80u32.into_val(&env),
+            ),
+        ],
+    );
+}
+
+#[test]
+fn rejected_anomaly_flags_do_not_emit_events() {
+    let env = Env::default();
+    let contract_id = env.register(StellarSentinel, ());
+    let client = StellarSentinelClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let agent = Address::generate(&env);
+    let unauthorized = Address::generate(&env);
+    let subject = Address::generate(&env);
+    env.mock_all_auths();
+
+    client.initialize(&admin, &75);
+    client.authorize_agent(&admin, &agent);
+    assert!(client.try_flag_anomaly(&unauthorized, &subject, &90).is_err());
+    assert!(env.events().all().is_empty());
+
+    assert!(client.try_flag_anomaly(&agent, &subject, &74).is_err());
+    assert!(env.events().all().is_empty());
+}
+
 
 #[test]
 fn latest_flag_is_empty_before_first_flag() {
