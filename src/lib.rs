@@ -154,7 +154,7 @@ impl StellarSentinel {
         let threshold = env.storage()
             .instance()
             .get(&DataKey::RiskThreshold)
-            .unwrap_or(0);
+            .expect("not initialized");
         bump_instance_ttl(&env);
         threshold
     }
