@@ -58,7 +58,13 @@ impl StellarSentinel {
     pub fn authorize_agent(env: Env, admin: Address, agent: Address) {
         admin.require_auth();
         require_admin(&env, &admin);
-        env.storage().instance().set(&DataKey::Agent(agent), &true);
+        let key = DataKey::Agent(agent);
+        env.storage().persistent().set(&key, &true);
+        env.storage().persistent().extend_ttl(
+            &key,
+            PERSISTENT_TTL_THRESHOLD,
+            PERSISTENT_TTL_BUMP,
+        );
         bump_instance_ttl(&env);
     }
 
@@ -66,9 +72,7 @@ impl StellarSentinel {
     pub fn revoke_agent(env: Env, admin: Address, agent: Address) {
         admin.require_auth();
         require_admin(&env, &admin);
-        env.storage()
-            .instance()
-            .set(&DataKey::Agent(agent), &false);
+        env.storage().persistent().remove(&DataKey::Agent(agent));
         bump_instance_ttl(&env);
     }
 
@@ -86,10 +90,16 @@ impl StellarSentinel {
     }
 
     pub fn is_agent(env: Env, agent: Address) -> bool {
-        env.storage()
-            .instance()
-            .get(&DataKey::Agent(agent))
-            .unwrap_or(false)
+        let key = DataKey::Agent(agent);
+        let authorized: bool = env.storage().persistent().get(&key).unwrap_or(false);
+        if authorized {
+            env.storage().persistent().extend_ttl(
+                &key,
+                PERSISTENT_TTL_THRESHOLD,
+                PERSISTENT_TTL_BUMP,
+            );
+        }
+        authorized
     }
 
     /// Called by an authorized agent when it flags a transaction/address as
@@ -97,11 +107,8 @@ impl StellarSentinel {
     /// the stable `flagged` event and records the latest flag for the subject.
     pub fn flag_anomaly(env: Env, agent: Address, subject: Address, score: u32) {
         agent.require_auth();
-        let is_agent: bool = env
-            .storage()
-            .instance()
-            .get(&DataKey::Agent(agent.clone()))
-            .unwrap_or(false);
+        let agent_key = DataKey::Agent(agent.clone());
+        let is_agent: bool = env.storage().persistent().get(&agent_key).unwrap_or(false);
         if !is_agent {
             panic!("not an authorized agent");
         }
@@ -116,6 +123,11 @@ impl StellarSentinel {
         if score < threshold {
             panic!("score below risk threshold");
         }
+        env.storage().persistent().extend_ttl(
+            &agent_key,
+            PERSISTENT_TTL_THRESHOLD,
+            PERSISTENT_TTL_BUMP,
+        );
         let key = DataKey::LatestFlag(subject.clone());
         let record = FlagRecord {
             agent: agent.clone(),
